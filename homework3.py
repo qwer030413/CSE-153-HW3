@@ -48,8 +48,8 @@ random.seed(42)
 # All pieces are monophonic music (i.e. one melody line) in 4/4 time signature.
 
 # %%
-midi_files = glob('/Users/comos/OneDrive/바탕 화면/CSE 153 HW3/PDMX_subset/PDMX_subset/*.mid')
-# midi_files = glob('PDMX_subset/*.mid')
+# midi_files = glob('/Users/comos/OneDrive/바탕 화면/CSE 153 HW3/PDMX_subset/PDMX_subset/*.mid')
+midi_files = glob('PDMX_subset/*.mid')
 len(midi_files)
 
 # %% [markdown]
@@ -188,10 +188,19 @@ def note_bigram_probability(midi_files):
     return bigramTransitions, bigramTransitionProbabilities
 
 # %%
+bigramTransitions = {}
+bigramTransitionProbabilities = {}
+bigramTransitions, bigramTransitionProbabilities = note_bigram_probability(midi_files)
 def sample_next_note(note):
     # Q3b: Your code goes here
     # next note sampled from pairwise probabilities is output
-    return res
+    # list of possible next notes using glpobal variable
+    nxt = bigramTransitions[note]
+    # probabailiys
+    prob = bigramTransitionProbabilities[note]
+    # get random and return
+    return random.choices(nxt, weights=prob, k=1)[0]
+    # return res
     pass
 
 # %% [markdown]
