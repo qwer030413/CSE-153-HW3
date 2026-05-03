@@ -36,12 +36,8 @@ from midiutil import MIDIFile
 random.seed(42)
 
 # %%
-pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
-
-
-# %%
-from google.colab import drive
-drive.mount('/content/drive')
+# from google.colab import drive
+# drive.mount('/content/drive')
 
 # %% [markdown]
 # ### Load music dataset
@@ -53,6 +49,7 @@ drive.mount('/content/drive')
 
 # %%
 midi_files = glob('/Users/comos/OneDrive/바탕 화면/CSE 153 HW3/PDMX_subset/PDMX_subset/*.mid')
+# midi_files = glob('PDMX_subset/*.mid')
 len(midi_files)
 
 # %% [markdown]
@@ -89,11 +86,29 @@ tokens[:10]
 # %%
 def note_extraction(midi_file):
     # Q1a: Your code goes here
-    pass
+    score = Score(midi_file)
+    # print(score)
+    # get tokens and its at [0]
+    tokens = tokenizer(score)[0].tokens
+    temp = []
+    
+    # get all tokens starting with pitch
+    for i in range(len(tokens)):
+        if tokens[i].startswith("Pitch_"):
+            temp.append(int(tokens[i].split("_")[1]))
+    return temp
+    # pass
+# note_extraction
 
 # %%
 def note_frequency(midi_files):
     # Q1b: Your code goes here
+    # use hashmap to count
+    h = {}
+    for i in midi_files:
+        for j in note_extraction(i):
+            h[j] = h.get(j,0) + 1
+    return h
     pass
 
 # %% [markdown]
@@ -111,7 +126,10 @@ def note_unigram_probability(midi_files):
 
     # Q2: Your code goes here
     # ...
-
+    # counts = note_frequency(midi_files)
+    temp = sum(note_counts.values())
+    for i, j in note_counts.items():
+        unigramProbabilities[i] = j / temp
     return unigramProbabilities
 
 # %% [markdown]
@@ -133,17 +151,47 @@ def note_unigram_probability(midi_files):
 
 # %%
 def note_bigram_probability(midi_files):
+    # default dicts are meh
+    # possible next notes, prob for each next note
     bigramTransitions = defaultdict(list)
     bigramTransitionProbabilities = defaultdict(list)
 
     # Q3a: Your code goes here
     # ...
+    h = {}
+    
+    # count biagrams
+    for i in midi_files:
+        temp = note_extraction(i)
+        for j in range(1, len(temp)):
+            prev = temp[j-1]
+            nxt = temp[j]
+            if prev not in h:
+                h[prev] = {}
+            if nxt not in h[prev]:
+                h[prev][nxt] = 0
+            h[prev][nxt] += 1
+            
+            
+            
+            
+    # make transistions into biagrams, using i,j like before for key, value
+    for i, j in h.items():
+        res = sum(j.values())
+        bigramTransitions[i] = list(j.keys())
+        temp = []
+        
+        for count in j.values():
+            temp.append(count / res)
+        bigramTransitionProbabilities[i] = temp
 
     return bigramTransitions, bigramTransitionProbabilities
 
 # %%
 def sample_next_note(note):
     # Q3b: Your code goes here
+    # next note sampled from pairwise probabilities is output
+    return res
     pass
 
 # %% [markdown]
