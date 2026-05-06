@@ -13,14 +13,14 @@
 # ! pip install miditok
 
 # %%
-# pip install MIDIUtil
-
+# ! pip install MIDIUtil
+# 
 
 # %%
 # import required packages
 import random
 from glob import glob
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 import numpy as np
 from numpy.random import choice
@@ -50,6 +50,8 @@ random.seed(42)
 # %%
 # midi_files = glob('/Users/comos/OneDrive/바탕 화면/CSE 153 HW3/PDMX_subset/PDMX_subset/*.mid')
 midi_files = glob('PDMX_subset/*.mid')
+# midi_files = glob('/Users/Seojin Park/Desktop/Coding/CSE-153-HW3/PDMX_subset/PDMX_subset/*.mid')
+
 len(midi_files)
 
 # %% [markdown]
@@ -224,6 +226,28 @@ def note_bigram_perplexity(midi_file):
 
     # Q4: Your code goes here
     # Can use regular numpy.log (i.e., natural logarithm)
+    # look at module 3 page 74 for future ref
+    notes = note_extraction(midi_file)
+    if len(notes) == 0:
+        return float("inf")
+    res = 0
+    for i in range(len(notes)):
+        # for w1
+        if i == 0:
+            # im doing 0.0001 bc we cant do log by 0 
+            temp = unigramProbabilities.get(notes[i], 1e-9)
+        else:
+            prev_note = notes[i - 1]
+            curr_note = notes[i]
+            if prev_note in bigramTransitions and curr_note in bigramTransitions[prev_note]:
+                idx = bigramTransitions[prev_note].index(curr_note)
+                temp = bigramTransitionProbabilities[prev_note][idx]
+            else:
+                temp = 1e-9
+        res += np.log(temp)
+    res = np.exp(-res / len(notes))
+    return res
+
 
 # %% [markdown]
 # 5. Implement a second-order Markov chain, i.e., one which estimates p(next_note | next_previous_note, previous_note); write a function to compute the perplexity of this new model on a midi file.
@@ -256,7 +280,25 @@ def note_trigram_probability(midi_files):
 
     # Q5a: Your code goes here
     # ...
+    # just use counter ig even if I dont use it as much
+    h = defaultdict(Counter)
 
+    #I love hashmaps
+    for midi_file in midi_files:
+        notes = note_extraction(midi_file)
+
+        for i in range(2, len(notes)):
+            context = (notes[i - 2], notes[i - 1])
+            next_note = notes[i]
+            h[context][next_note] += 1
+            
+    # I think it still works without items but its whatever
+    for i,j in h.items():
+        temp = sum(j.values())
+        for a,b in j.items():
+            trigramTransitions[i].append(a) 
+            trigramTransitionProbabilities[i].append(b/ temp)
+            
     return trigramTransitions, trigramTransitionProbabilities
 
 # %%
@@ -266,6 +308,47 @@ def note_trigram_perplexity(midi_file):
     trigramTransitions, trigramTransitionProbabilities = note_trigram_probability(midi_files)
 
     # Q5b: Your code goes here
+    
+    
+    
+    
+    notes = note_extraction(midi_file)
+    # just making sure again
+    if len(notes) == 0:
+        return float("inf")
+
+    res = 0
+    for i in range(len(notes)):
+        curr_note = notes[i]
+        # check if we have 0, 1 or all remaining notes with if
+        if i ==0:
+            temp = unigramProbabilities.get(curr_note, 1e-9)
+
+        elif i == 1:
+            prev_note = notes[i - 1]
+            if prev_note in bigramTransitions and curr_note in bigramTransitions[prev_note]:
+                idx = bigramTransitions[prev_note].index(curr_note)
+                temp = bigramTransitionProbabilities[prev_note][idx]
+            else:
+                temp = 1e-9
+
+
+        # everything else P(currrent | prev2, prev1)
+        else:
+            context = (notes[i - 2], notes[i - 1])
+            if context in trigramTransitions and curr_note in trigramTransitions[context]:
+                index = trigramTransitions[context].index(curr_note)
+                temp = trigramTransitionProbabilities[context][index]
+            else:
+                # basically does 0.,000001
+                temp = 1e-9
+        res += np.log(temp)
+
+
+
+    res = np.exp(-res / len(notes))
+    return res
+
 
 # %% [markdown]
 # 6. Our model currently doesn’t have any knowledge of beats. Write a function that extracts beat lengths and outputs a list of [(beat position; beat length)] values.
@@ -294,6 +377,26 @@ duration2length = {
 # %%
 def beat_extraction(midi_file):
     # Q6: Your code goes here
+    # notes = note_extraction(midi_file)
+    # im so stupid we cant reuse note extrreaction
+    res = []
+    i = 0
+    score = Score(midi_file)
+    tokens = tokenizer(score)[0].tokens
+    while i < len(tokens):
+        if tokens[i].startswith("Position_"):
+            pos_token = tokens[i]
+            dur_token = tokens[i + 3]
+
+            pos = int(pos_token.split('_')[1])
+            length = duration2length.get(dur_token.split("Duration_")[1], 0)
+
+            res.append((pos, length))
+            i += 4
+        else:
+            i += 1
+
+    return res
     pass
 
 # %% [markdown]
@@ -314,8 +417,25 @@ def beat_bigram_probability(midi_files):
     bigramBeatTransitionProbabilities = defaultdict(list)
 
     # Q7: Your code goes here
-    # ...
-
+    # ... We do p(lent | len t - 1)
+    # use dd and lambda
+    h = defaultdict(lambda: defaultdict(int))
+    for i in midi_files:
+        # get beats, tuples of pos, len
+        beats = beat_extraction(i)
+        # count bigram trans
+        for j in range(1, len(beats)):
+            prev_len = beats[j-1][1]
+            curr_len = beats[j][1]
+            h[prev_len][curr_len] += 1
+            
+    # make into probs   
+    for i, j in h.items():
+        total = sum(j.values())
+        bigramBeatTransitions[i] = list(j.keys())
+        bigramBeatTransitionProbabilities[i] = [
+            c / total for c in j.values()
+        ]
     return bigramBeatTransitions, bigramBeatTransitionProbabilities
 
 # %% [markdown]
@@ -342,6 +462,22 @@ def beat_pos_bigram_probability(midi_files):
 
     # Q8a: Your code goes here
     # ...
+    h = defaultdict(lambda: defaultdict(int))
+    # count
+    for i in midi_files:
+        beats = beat_extraction(i)
+        for j in beats:
+            pos = j[0]
+            length = j[1]
+            h[pos][length] += 1
+
+    # convert again
+    for i, j in h.items():
+        total = sum(j.values())
+        bigramBeatPosTransitions[i] = list(j.keys())
+        bigramBeatPosTransitionProbabilities[i] = [
+            c / total for c in j.values()
+        ]
 
     return bigramBeatPosTransitions, bigramBeatPosTransitionProbabilities
 
@@ -358,6 +494,40 @@ def beat_bigram_perplexity(midi_file):
     # perplexity for Q8
     perplexity_Q8 = None
 
+
+    beats = beat_extraction(midi_file)
+    if len(beats) == 0:
+        return float("inf"), float("inf")
+    
+    # helper function to get probabailtuiy
+    def helper(mapping, probs, key1, key2, default=1e-9):
+        if key1 in mapping and key2 in mapping[key1]:
+            idx = mapping[key1].index(key2)
+            return probs[key1][idx]
+        return default
+    # q7 perp
+    res = 0
+    for i in range(len(beats)):
+        curr_len = beats[i][1]
+
+        if i == 0:
+            prob = 1 / len(duration2length)
+        else:
+            prev_len = beats[i -1][1]
+            prob = helper(bigramBeatTransitions,bigramBeatTransitionProbabilities, prev_len, curr_len)
+
+        res += np.log(prob)
+
+    perplexity_Q7 = np.exp(-res / len(beats))
+    
+    # q8 perp
+    res2 = 0
+    for pos, curr_len in beats:
+        prob = helper(bigramBeatPosTransitions, bigramBeatPosTransitionProbabilities, pos, curr_len)
+        res2 += np.log(prob)
+
+    perplexity_Q8 = np.exp(-res2 / len(beats))
+    
     return perplexity_Q7, perplexity_Q8
 
 # %% [markdown]
@@ -383,8 +553,25 @@ def beat_trigram_probability(midi_files):
     trigramBeatTransitionProbabilities = defaultdict(list)
 
     # Q9a: Your code goes here
-    # ...
+    # ... hashmap: h[(prev_len, pos)][curr_len]
+    h = defaultdict(lambda: defaultdict(int))
 
+    # count
+    for midi_file in midi_files:
+        beats = beat_extraction(midi_file)
+        for i in range(1, len(beats)):
+            prev_len = beats[i - 1][1]
+            pos = beats[i][0]
+            curr_len = beats[i][1]
+
+            context = (prev_len, pos)
+            h[context][curr_len] += 1
+
+    # convert again agian
+    for i, j in h.items():
+        total = sum(j.values())
+        trigramBeatTransitions[i] = list(j.keys())
+        trigramBeatTransitionProbabilities[i] = [c / total for c in j.values()]
     return trigramBeatTransitions, trigramBeatTransitionProbabilities
 
 # %%
@@ -392,6 +579,42 @@ def beat_trigram_perplexity(midi_file):
     bigramBeatPosTransitions, bigramBeatPosTransitionProbabilities = beat_pos_bigram_probability(midi_files)
     trigramBeatTransitions, trigramBeatTransitionProbabilities = beat_trigram_probability(midi_files)
     # Q9b: Your code goes here
+    
+    beats = beat_extraction(midi_file)
+    if len(beats) == 0:
+        return float("inf")
+    res = 0
+
+    for i in range(len(beats)):
+        temp = beats[i][1]
+
+        # first beat
+        if i == 0:
+            prob = 1 / len(duration2length)
+        # trigram probability
+        elif i == 1:
+            pos = beats[i][0]
+            if pos in bigramBeatPosTransitions and temp in bigramBeatPosTransitions[pos]:
+                idx = bigramBeatPosTransitions[pos].index(temp)
+                prob = bigramBeatPosTransitionProbabilities[pos][idx]
+            else:
+                # just use smoothing ig
+                prob = 1 / len(duration2length)
+        else:
+            prev_len = beats[i-1][1]
+            pos = beats[i][0]
+            context = (prev_len, pos)
+            if context in trigramBeatTransitions and temp in trigramBeatTransitions[context]:
+                idx = trigramBeatTransitions[context].index(temp)
+                prob = trigramBeatTransitionProbabilities[context][idx]
+                # fall back to 0.000001
+            else:
+                prob = 1 / len(duration2length)
+                
+                
+                
+        res += np.log(prob)
+    return np.exp(-res / len(beats))
 
 # %% [markdown]
 # 10. Use the model from Q5 to generate N notes, and the model from Q8 to generate beat lengths for each note. Save the generated music as a midi file (see code from workbook1) as q10.mid. Remember to reset the beat position to 0 when reaching the end of a bar.
@@ -418,5 +641,65 @@ def music_generate(length):
 
     # save the generated music as a midi file
 
+
+    beatPosTransitions, beatPosProbs = beat_pos_bigram_probability(midi_files)
+    notesList = list(unigramProbabilities.keys())
+    probsList = list(unigramProbabilities.values())
+    firstNote = random.choices(notesList, weights=probsList)[0]
+
+    prev_prev_note = firstNote
+    prev_note = firstNote
+
+    sampled_notes.append(firstNote)
+
+    # init beat
+    temp = 0
+
+    for i in range(length):
+        # beat
+        if temp in beatPosTransitions:
+            lengths = beatPosTransitions[temp]
+            probs = beatPosProbs[temp]
+            beatLen = random.choices(lengths, weights=probs)[0]
+        else:
+            beatLen = 8
+
+        sampled_beats.append((temp, beatLen))
+
+        #update position
+        temp = (temp + beatLen) % 32
+
+        # note
+        if i == 0:
+            nextNote = firstNote
+        elif i == 1:
+            nextNote = sample_next_note(prev_note)
+        else:
+            context = (prev_prev_note, prev_note)
+            if context in trigramTransitions:
+                nxts = trigramTransitions[context]
+                probs = trigramTransitionProbabilities[context]
+                nextNote = random.choices(nxts, weights=probs)[0]
+            else:
+                nextNote = sample_next_note(prev_note)
+
+        sampled_notes.append(nextNote)
+        prev_prev_note, prev_note = prev_note, nextNote
+
+
+    # write to file
+    midi = MIDIFile(1)
+    track = 0
+    time = 0
+    channel = 0
+    volume = 100
+
+    for note, (pos, length) in zip(sampled_notes, sampled_beats):
+        duration = length / 8
+        midi.addNote(track, channel, note, time, duration, volume)
+        time += duration
+
+    with open("q10.mid", "wb") as f:
+        midi.writeFile(f)
 
 
